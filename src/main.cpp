@@ -1,20 +1,26 @@
 #include <Arduino.h>
 #include <HardwareSerial.h>
 
-#define BUTTON1_PIN 43
-#define BUTTON2_PIN 44
-#define BUTTON3_PIN 21
-#define BUTTON4_PIN 16
+#define COLUMN1_PIN 43
+#define COLUMN2_PIN 44
+#define COLUMN3_PIN 21
+#define COLUMN4_PIN 16
+
+#define ROW1_PIN 1
+#define ROW2_PIN 2
 
 #define BUTTON1_NOTE 60
 #define BUTTON2_NOTE 61
 #define BUTTON3_NOTE 62
 #define BUTTON4_NOTE 63
+#define BUTTON5_NOTE 64
+#define BUTTON6_NOTE 65
+#define BUTTON7_NOTE 66
+#define BUTTON8_NOTE 67
 
 #define VELOCITY 100
 
 #define DEFAULT_BUTTON_STATE 1
-
 
 #define RX_PIN 18
 #define TX_PIN 17
@@ -28,6 +34,10 @@ int lastButton1State = DEFAULT_BUTTON_STATE;
 int lastButton2State = DEFAULT_BUTTON_STATE;
 int lastButton3State = DEFAULT_BUTTON_STATE;
 int lastButton4State = DEFAULT_BUTTON_STATE;
+int lastButton5State = DEFAULT_BUTTON_STATE;
+int lastButton6State = DEFAULT_BUTTON_STATE;
+int lastButton7State = DEFAULT_BUTTON_STATE;
+int lastButton8State = DEFAULT_BUTTON_STATE;
 
 
 void setup() {
@@ -35,12 +45,18 @@ void setup() {
   Serial.begin(115200);
   SerialPort2.begin(31250, SERIAL_8N1, RX_PIN, TX_PIN);
 
-  pinMode(BUTTON1_PIN, INPUT_PULLUP);
-  pinMode(BUTTON2_PIN, INPUT_PULLUP);
-  pinMode(BUTTON3_PIN, INPUT_PULLUP);
-  pinMode(BUTTON4_PIN, INPUT_PULLUP);
+  pinMode(COLUMN1_PIN, INPUT_PULLUP);
+  pinMode(COLUMN2_PIN, INPUT_PULLUP);
+  pinMode(COLUMN3_PIN, INPUT_PULLUP);
+  pinMode(COLUMN4_PIN, INPUT_PULLUP);
+
+  pinMode(ROW1_PIN, OUTPUT);
+  pinMode(ROW2_PIN, OUTPUT);
   
-  delay(100);
+  delay(800);
+
+  digitalWrite(ROW1_PIN, HIGH);
+  digitalWrite(ROW2_PIN, HIGH);
 
   Serial.println("Keyboard Ready, waiting for inputs");
 }
@@ -57,11 +73,13 @@ void MIDIMessage(int command, int note, int velocity) {
 
 void loop() {
 
+  digitalWrite(ROW2_PIN, HIGH);
+  digitalWrite(ROW1_PIN, LOW);
 
-  int button1State = digitalRead(BUTTON1_PIN);
-  int button2State = digitalRead(BUTTON2_PIN);
-  int button3State = digitalRead(BUTTON3_PIN);
-  int button4State = digitalRead(BUTTON4_PIN);
+  int button1State = digitalRead(COLUMN1_PIN);
+  int button2State = digitalRead(COLUMN2_PIN);
+  int button3State = digitalRead(COLUMN3_PIN);
+  int button4State = digitalRead(COLUMN4_PIN);
 
   if (button1State != lastButton1State) {
     if (button1State != DEFAULT_BUTTON_STATE) {
@@ -100,14 +118,51 @@ void loop() {
   lastButton3State = button3State;
   lastButton4State = button4State;
 
-  // Serial.print("Button 1 State: ");
-  // Serial.print(button1State);
-  // Serial.print(", Button 2 State: ");
-  // Serial.print(button2State);
-  // Serial.print(", Button 3 State: ");
-  // Serial.print(button3State);
-  // Serial.print(", Button 4 State: ");
-  // Serial.println(button4State);
+  digitalWrite(ROW1_PIN, HIGH);
+  digitalWrite(ROW2_PIN, LOW);
+
+  int button5State = digitalRead(COLUMN1_PIN);
+  int button6State = digitalRead(COLUMN2_PIN);
+  int button7State = digitalRead(COLUMN3_PIN);
+  int button8State = digitalRead(COLUMN4_PIN);
+
+  if (button5State != lastButton5State) {
+    if (button5State != DEFAULT_BUTTON_STATE) {
+      MIDIMessage(NOTE_ON, BUTTON5_NOTE, VELOCITY);
+    } else {
+      MIDIMessage(NOTE_OFF, BUTTON5_NOTE, VELOCITY);
+    }
+  }
+
+  if (button6State != lastButton6State) {
+    if (button6State != DEFAULT_BUTTON_STATE) {
+      MIDIMessage(NOTE_ON, BUTTON6_NOTE, VELOCITY);
+    } else {
+      MIDIMessage(NOTE_OFF, BUTTON6_NOTE, VELOCITY);
+    }
+  }
+
+  if (button7State != lastButton7State) {
+    if (button7State != DEFAULT_BUTTON_STATE) {
+      MIDIMessage(NOTE_ON, BUTTON7_NOTE, VELOCITY);
+    } else {
+      MIDIMessage(NOTE_OFF, BUTTON7_NOTE, VELOCITY);
+    }
+  }
+
+  if (button8State != lastButton8State) {
+    if (button8State != DEFAULT_BUTTON_STATE) {
+      MIDIMessage(NOTE_ON, BUTTON8_NOTE, VELOCITY);
+    } else {
+      MIDIMessage(NOTE_OFF, BUTTON8_NOTE, VELOCITY);
+    }
+  }
+
+  lastButton5State = button5State;
+  lastButton6State = button6State;
+  lastButton7State = button7State;
+  lastButton8State = button8State;
+
 
   delay(10);
 }
