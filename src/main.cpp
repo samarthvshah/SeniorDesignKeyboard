@@ -25,6 +25,13 @@
 #define BUTTON6_NOTE 65
 #define BUTTON7_NOTE 66
 #define BUTTON8_NOTE 67
+#define BUTTON9_NOTE 68
+#define BUTTON10_NOTE 69
+#define BUTTON11_NOTE 70
+#define BUTTON12_NOTE 71
+#define BUTTON13_NOTE 72
+#define BUTTON14_NOTE 73
+#define BUTTON15_NOTE 74
 
 #define VELOCITY 100
 
@@ -111,21 +118,13 @@ void MIDIMessage(int command, int note, int velocity) {
   Serial1.write(command);
   Serial1.write(note);
   Serial1.write(velocity);
-  // Serial.println(command);
-  // Serial.println(note);
-  // Serial.println(velocity);
-  // Serial.println("\n");
+  Serial.println(command);
+  Serial.println(note);
+  Serial.println(velocity);
+  Serial.println("\n");
 }
 
 void loop() {
-
-  
-  if (Serial1.available()) {
-    int incomingByte = Serial1.read();
-
-    Serial.println(incomingByte);
-
-  }
 
   io.digitalWrite(ROW2_PIN, HIGH);
   io.digitalWrite(ROW1_PIN, LOW);
@@ -143,41 +142,41 @@ void loop() {
 
   if (button1State != lastButton1State) {
     if (button1State != DEFAULT_BUTTON_STATE) {
-      // MIDIMessage(NOTE_ON, BUTTON1_NOTE, VELOCITY);
+      MIDIMessage(NOTE_ON, BUTTON11_NOTE, VELOCITY);
     } else {
-      // MIDIMessage(NOTE_OFF, BUTTON1_NOTE, VELOCITY);
+      MIDIMessage(NOTE_OFF, BUTTON11_NOTE, VELOCITY);
     }
   }
 
   if (button2State != lastButton2State) {
     if (button2State != DEFAULT_BUTTON_STATE) {
-      // MIDIMessage(NOTE_ON, BUTTON2_NOTE, VELOCITY);
+      MIDIMessage(NOTE_ON, BUTTON12_NOTE, VELOCITY);
     } else {
-      // MIDIMessage(NOTE_OFF, BUTTON2_NOTE, VELOCITY);
+      MIDIMessage(NOTE_OFF, BUTTON12_NOTE, VELOCITY);
     }
   }
 
   if (button3State != lastButton3State) {
     if (button3State != DEFAULT_BUTTON_STATE) {
-      // MIDIMessage(NOTE_ON, BUTTON3_NOTE, VELOCITY);
+      MIDIMessage(NOTE_ON, BUTTON13_NOTE, VELOCITY);
     } else {
-      // MIDIMessage(NOTE_OFF, BUTTON3_NOTE, VELOCITY);
+      MIDIMessage(NOTE_OFF, BUTTON13_NOTE, VELOCITY);
     }
   }
 
   if (button4State != lastButton4State) {
     if (button4State != DEFAULT_BUTTON_STATE) {
-      // MIDIMessage(NOTE_ON, BUTTON4_NOTE, VELOCITY);
+      MIDIMessage(NOTE_ON, BUTTON14_NOTE, VELOCITY);
     } else {
-      // MIDIMessage(NOTE_OFF, BUTTON4_NOTE, VELOCITY);
+      MIDIMessage(NOTE_OFF, BUTTON14_NOTE, VELOCITY);
     }
   }
 
     if (button5State != lastButton5State) {
     if (button5State != DEFAULT_BUTTON_STATE) {
-      // MIDIMessage(NOTE_ON, BUTTON5_NOTE, VELOCITY);
+      MIDIMessage(NOTE_ON, BUTTON15_NOTE, VELOCITY);
     } else {
-      // MIDIMessage(NOTE_OFF, BUTTON5_NOTE, VELOCITY);
+      MIDIMessage(NOTE_OFF, BUTTON15_NOTE, VELOCITY);
     }
   }
 
@@ -312,17 +311,17 @@ void loop() {
 
   if (button19State != lastButton19State) {
     if (button19State != DEFAULT_BUTTON_STATE) {
-      // MIDIMessage(NOTE_ON, BUTTON9_NOTE, VELOCITY);
+      MIDIMessage(NOTE_ON, BUTTON9_NOTE, VELOCITY);
     } else {
-      // MIDIMessage(NOTE_OFF, BUTTON9_NOTE, VELOCITY);
+      MIDIMessage(NOTE_OFF, BUTTON9_NOTE, VELOCITY);
     }
   }
 
   if (button20State != lastButton20State) {
     if (button20State != DEFAULT_BUTTON_STATE) {
-      // MIDIMessage(NOTE_ON, BUTTON10_NOTE, VELOCITY);
+      MIDIMessage(NOTE_ON, BUTTON10_NOTE, VELOCITY);
     } else {
-      // MIDIMessage(NOTE_OFF, BUTTON10_NOTE, VELOCITY);
+      MIDIMessage(NOTE_OFF, BUTTON10_NOTE, VELOCITY);
     }
   }
 
