@@ -435,6 +435,75 @@ void loop() {
   lastButton9State = button9State;
   lastButton10State = button10State;
 
+  // String buttonsPressedString = "";
 
-  delay(10);
+  tft.fillScreen(TFT_BLACK);
+  tft.setCursor(0,0,4);
+  tft.setTextColor(TFT_WHITE);
+  tft.println("Normal Mode"); 
+  tft.println("Buttons Pressed: "); 
+
+  if (lastButton1State != DEFAULT_BUTTON_STATE) {
+    tft.print("1 "); 
+  }
+  if (lastButton2State != DEFAULT_BUTTON_STATE) {
+    tft.print("2 "); 
+  }
+  if (lastButton3State != DEFAULT_BUTTON_STATE) {
+    tft.print("3 "); 
+  }
+  if (lastButton4State != DEFAULT_BUTTON_STATE) {
+    tft.print("4 "); 
+  }
+  if (lastButton5State != DEFAULT_BUTTON_STATE) {
+    tft.print("5 "); 
+  }
+  if (lastButton6State != DEFAULT_BUTTON_STATE) {
+    tft.print("6 "); 
+  }
+  if (lastButton7State != DEFAULT_BUTTON_STATE) {
+    tft.print("7 "); 
+  }
+  if (lastButton8State != DEFAULT_BUTTON_STATE) {
+    tft.print("8 "); 
+  }
+  if (lastButton9State != DEFAULT_BUTTON_STATE) {
+    tft.print("9 "); 
+  }
+  if (lastButton10State != DEFAULT_BUTTON_STATE) {
+    tft.print("10 "); 
+  }
+  if (lastButton11State != DEFAULT_BUTTON_STATE) {
+    tft.print("11 "); 
+  }
+  if (lastButton12State != DEFAULT_BUTTON_STATE) {
+    tft.print("12 "); 
+  }
+  if (lastButton13State != DEFAULT_BUTTON_STATE) {
+    tft.print("13 "); 
+  }
+  if (lastButton14State != DEFAULT_BUTTON_STATE) {
+    tft.print("14 "); 
+  }
+  if (lastButton15State != DEFAULT_BUTTON_STATE) {
+    tft.print("15 "); 
+  }
+  if (lastButton16State != DEFAULT_BUTTON_STATE) {
+    tft.print("16 "); 
+  }
+  if (lastButton17State != DEFAULT_BUTTON_STATE) {
+    tft.print("17 "); 
+  }
+  if (lastButton18State != DEFAULT_BUTTON_STATE) {
+    tft.print("18 "); 
+  }
+  if (lastButton19State != DEFAULT_BUTTON_STATE) {
+    tft.print("19 "); 
+  }
+  if (lastButton20State != DEFAULT_BUTTON_STATE) {
+    tft.print("20 "); 
+  }
+
+
+  delay(50);
 }
