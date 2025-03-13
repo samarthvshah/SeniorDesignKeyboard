@@ -2,20 +2,15 @@
 #include <Wire.h> 
 #include <HardwareSerial.h>
 #include <SparkFunSX1509.h>
-#include <Adafruit_GFX.h>
-#include <Adafruit_SSD1306.h>
-#include <tft_espi.h>
-
-
-// #define SCREEN_WIDTH 128
-// #define SCREEN_HEIGHT 64
-// #define OLED_RESET    -1
-// #define SCREEN_ADDRESS 0x3C  
-// Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
+#include <TFT_eSPI.h>
+#include "FS.h"
+#include "SD.h"
+#include "SPI.h"
+#include "pin_config.h"
 
 #define ROW1_PIN 0
 #define ROW2_PIN 1
-#define MAX_EVENTS 500
+
 #define COLUMN1_PIN 2
 #define COLUMN2_PIN 3
 #define COLUMN3_PIN 4
@@ -47,20 +42,32 @@
 
 #define DEFAULT_BUTTON_STATE 1
 
-#define RX_PIN 3
-#define TX_PIN 10
+#define RX_PIN 43
+#define TX_PIN 44
+
+// #define PIN_POWER_ON 15  // LCD and battery Power Enable
+// #define PIN_LCD_BL 38    // BackLight enable pin (see Dimming.txt)
 
 #define SDA_PIN 1
 #define SCL_PIN 2
 
+#define SD_CS_PIN 10
+
 #define NOTE_ON  144
 #define NOTE_OFF 128
 
-//HardwareSerial SerialPort2(2);
+
+#define MAX_SONGS 5
+
+// HardwareSerial SerialPort2(2);
 
 // SX1509 I2C address (set by ADDR1 and ADDR0 (00 by default):
 const byte SX1509_ADDRESS = 0x3E; // SX1509 I2C address
 SX1509 io;                        // Create an SX1509 object to be used throughout
+
+// Objects for the screen, UART to the GPS board, and parsing GPS data
+TFT_eSPI tft = TFT_eSPI();
+
 
 int lastButton1State = DEFAULT_BUTTON_STATE;
 int lastButton2State = DEFAULT_BUTTON_STATE;
@@ -83,24 +90,249 @@ int lastButton18State = DEFAULT_BUTTON_STATE;
 int lastButton19State = DEFAULT_BUTTON_STATE;
 int lastButton20State = DEFAULT_BUTTON_STATE;
 
-
-
-struct NoteEvent{
-  byte note;
-  byte velocity;
-  bool NoteOn;
-  unsigned long timestamp;
-};
-
-Song song[MAX_EVENTS];
-int recorded = 0;
 bool isRecording = false;
 bool isPlaying = false;
+int recorded = 0;
 unsigned long recordingStartTime = 0;
 unsigned long recordingEndTime = 0;
+int eventCount = 0;
+int songIndex = 0;
 int playBackIndex = 0;
+int nextRecordingSlot = 1;
 
-bool isScreenOn = true;
+
+struct Song {
+  byte note;
+  byte velocity;
+  bool isNoteOn;
+  unsigned long timeStamp;
+};
+
+Song recordedSongs[MAX_SONGS];
+
+void recordSong(int command, int note, int velocity) {
+  if (!isRecording || eventCount >= MAX_SONGS) return;
+  recordedSongs[eventCount].note = note;
+  recordedSongs[eventCount].velocity = velocity;
+  recordedSongs[eventCount].isNoteOn = (command == NOTE_ON);
+  recordedSongs[eventCount].timeStamp = millis() - recordingStartTime;
+  eventCount++;
+}
+
+void MIDIMessage(int command, int note, int velocity) {
+  Serial1.write(command);
+  Serial1.write(note);
+  Serial1.write(velocity);
+  Serial.println(command);
+  Serial.println(note);
+  Serial.println(velocity);
+  Serial.println("\n");
+  if (isRecording) {
+    recordSong(command, note, velocity);
+  }
+}
+
+
+
+
+void startRecording() {
+  recordingStartTime = millis();
+  isRecording = true;
+  Serial.println("Recording Started");
+  tft.fillScreen(TFT_BLACK);
+  tft.setCursor(0, 0, 4);
+  tft.setTextColor(TFT_WHITE);
+  tft.println("Recording Started");
+}
+
+void stopRecording() {
+  if (!isRecording) return;
+  recordingEndTime = millis();
+isRecording = false;
+Serial.println("Recording Stopped");
+tft.fillScreen(TFT_BLACK);
+tft.setCursor(0, 0, 4);
+tft.setTextColor(TFT_WHITE);
+tft.println("Recording Stopped");
+
+
+}
+
+void startPlayback() {
+  if (eventCount == 0) {
+    Serial.println("No events to play"); 
+    tft.fillScreen(TFT_BLACK);
+  tft.setCursor(0, 0, 4);
+  tft.setTextColor(TFT_WHITE);
+  tft.println("Nothing to play");
+    return;
+  }
+
+  isPlaying = true;
+  playBackIndex = 0;
+  Serial.println("Playback Started");
+  tft.fillScreen(TFT_BLACK);
+  tft.setCursor(0, 0, 4);
+  tft.setTextColor(TFT_WHITE);
+  tft.println("Playback Started");
+}
+
+void stopPlayback() {
+  isPlaying = false;
+  Serial.println("Playback Stopped");
+  tft.fillScreen(TFT_BLACK);
+  tft.setCursor(0, 0, 4);
+  tft.setTextColor(TFT_WHITE);
+  tft.println("Playback Stopped");
+  for (byte note = 0; note < 128; note++) {
+    Serial1.write(NOTE_OFF);
+    Serial1.write(note);
+    Serial1.write(0);
+  }
+}
+
+void playbackTiming() {
+  if (!isPlaying || eventCount == 0) return;
+  unsigned long currentTime = millis() - recordingStartTime;
+  while (playBackIndex < eventCount && recordedSongs[playBackIndex].timeStamp <= currentTime) {
+    byte command = recordedSongs[playBackIndex].isNoteOn ? NOTE_ON : NOTE_OFF;
+    byte note = recordedSongs[playBackIndex].note;
+    byte velocity = recordedSongs[playBackIndex].velocity;
+    Serial1.write(command);
+    Serial1.write(note);
+    Serial1.write(velocity);
+    playBackIndex++;
+    if (playBackIndex >= eventCount) {
+      isPlaying = false;
+      Serial.println("Playback Complete");
+      tft.fillScreen(TFT_BLACK);
+      tft.setCursor(0, 0, 4);
+      tft.setTextColor(TFT_WHITE);
+      tft.println("Playback Complete");
+      break;
+    }
+  }
+}
+
+void writeToFile(fs::FS &fs, const char *filename, Song events[], int count) {
+  File file = fs.open(filename, FILE_WRITE);
+  if (!file) {
+    Serial.println("Error opening file for writing");
+    return;
+  }
+  // Write each event as a CSV line.
+  for (int i = 0; i < count; i++) {
+    file.print(events[i].timeStamp);
+    file.print(",");
+    file.print(events[i].note);
+    file.print(",");
+    file.print(events[i].velocity);
+    file.print(",");
+    file.println(events[i].isNoteOn ? 1 : 0);
+  }
+  file.close();
+  Serial.println("Song events saved to SD card");
+}
+
+int readFromFile(fs::FS &fs, const char *filename, Song events[], int maxCount) {
+  File file = fs.open(filename, FILE_READ);
+  if (!file) {
+    Serial.println("Error opening file for reading");
+    return 0;
+  }
+  int count = 0;
+  while (file.available() && count < maxCount) {
+    String line = file.readStringUntil('\n');
+    line.trim();
+    if (line.length() == 0) continue;
+    int firstComma = line.indexOf(',');
+    int secondComma = line.indexOf(',', firstComma + 1);
+    int thirdComma = line.indexOf(',', secondComma + 1);
+    if (firstComma == -1 || secondComma == -1 || thirdComma == -1) continue;
+    String tsStr = line.substring(0, firstComma);
+    String noteStr = line.substring(firstComma + 1, secondComma);
+    String velStr = line.substring(secondComma + 1, thirdComma);
+    String isNoteOnStr = line.substring(thirdComma + 1);
+    events[count].timeStamp = tsStr.toInt();
+    events[count].note = noteStr.toInt();
+    events[count].velocity = velStr.toInt();
+    events[count].isNoteOn = (isNoteOnStr.toInt() == 1);
+    count++;
+  }
+  file.close();
+  Serial.println("Song events loaded from SD card");
+  return count;
+}
+
+
+void listDir(fs::FS &fs, const char *dirname, uint8_t levels) {
+    Serial.printf("Listing directory: %s\n", dirname);
+
+    File root = fs.open(dirname);
+    if (!root) {
+        Serial.println("Failed to open directory");
+        return;
+    }
+    if (!root.isDirectory()) {
+        Serial.println("Not a directory");
+        return;
+    }
+
+    File file = root.openNextFile();
+    while (file) {
+        if (file.isDirectory()) {
+            Serial.print("DIR : ");
+            Serial.println(file.name());
+            if (levels) {
+                listDir(fs, file.name(), levels - 1);
+            }
+        } else {
+            Serial.print("FILE: ");
+            Serial.print(file.name());
+            Serial.print("  SIZE: ");
+            Serial.println(file.size());
+        }
+        file = root.openNextFile();
+    }
+}
+
+
+
+void saveCurrentRecording() {
+  char filename[20];
+  sprintf(filename, "/recording%d.txt", nextRecordingSlot);
+  writeToFile(SD, filename, recordedSongs, eventCount);
+  Serial.print("Saved recording to ");
+  Serial.println(filename);
+  nextRecordingSlot++;
+  if (nextRecordingSlot > MAX_SONGS) nextRecordingSlot = 1;
+}
+
+void playRecording(int slot) {
+  char filename[20];
+  sprintf(filename, "/recording%d.txt", slot);
+  eventCount = readFromFile(SD, filename, recordedSongs, MAX_SONGS);
+  if (eventCount > 0) {
+    isPlaying = true;
+    playBackIndex = 0;
+    recordingStartTime = millis(); // Reset playback timer
+    Serial.print("Playback started from ");
+    Serial.println(filename);
+    tft.fillScreen(TFT_BLACK);
+    tft.setCursor(0, 0, 4);
+    tft.setTextColor(TFT_WHITE);
+    tft.println("Playback Started");
+    tft.println(filename);
+  } else {
+    Serial.print("No recording found in ");
+    Serial.println(filename);
+    tft.fillScreen(TFT_BLACK);
+    tft.setCursor(0, 0, 4);
+    tft.setTextColor(TFT_WHITE);
+    tft.println("No recording found");
+  }
+}
+
 
 void setup() {
   // put your setup code here, to run once:
@@ -109,19 +341,23 @@ void setup() {
   Serial.begin(115200);
   Serial1.begin(31250, SERIAL_8N1, RX_PIN, TX_PIN);
 
+  pinMode(PIN_POWER_ON, OUTPUT);
+  digitalWrite(PIN_POWER_ON, HIGH);
+
+  pinMode(PIN_LCD_BL, OUTPUT);
+  digitalWrite(PIN_LCD_BL, HIGH);
+
+  tft.init();
+  tft.setRotation(3);
+  tft.fillScreen(TFT_BLACK);
+  tft.setCursor(0,0,4);
+  tft.setTextColor(TFT_WHITE);
+  tft.println("Normal Mode"); 
+  
+
   delay(800);
 
   Serial.println("Starting SX1509");
-
-  tft.init();
-  tft.setRotation(1);
-  tft.fillScreen(TFT_BLACK);
-  tft.setTextColor(TFT_WHITE, TFT_BLACK);
-  tft.setTextSize(2);
-  tft.setCursor(0, 0);
-  tft.println("Welcome!");
-  tft.setCursor(20,50);
-  tft.println("Press any key to start");
 
   if (io.begin(SX1509_ADDRESS) == false)
   {
@@ -129,6 +365,24 @@ void setup() {
     while (1)
       ; // If we fail to communicate, loop forever.
   }
+  Serial.println("GPIO expander initialized successfully.");
+
+  Serial.println("Initializing SD card...");
+
+  if (!SD.begin(SD_CS_PIN)) {
+      Serial.println("SD card initialization failed!");
+      return;
+  }
+  Serial.println("SD card initialized successfully.");
+
+  // delay(500);
+
+  // // List all files in root directory
+  // writeToFile(SD, "/data.txt", "Hello");
+
+  // listDir(SD, "/", 0);
+
+  // readFromFile(SD, "/data.txt");
 
   io.pinMode(COLUMN1_PIN, INPUT_PULLUP);
   io.pinMode(COLUMN2_PIN, INPUT_PULLUP);
@@ -143,102 +397,11 @@ void setup() {
 
   io.pinMode(ROW1_PIN, OUTPUT);
   io.pinMode(ROW2_PIN, OUTPUT);
-  
+
   delay(800);
 
-  io.digitalWrite(ROW1_PIN, HIGH);
-  io.digitalWrite(ROW2_PIN, HIGH);
 
   Serial.println("Keyboard Ready, waiting for inputs");
-}
-
-
-void showMessage(const char* message) {
-  tft.fillScreen(TFT_BLACK);
-  tft.setCursor(0, 0);
-  tft.setTextColor(TFT_WHITE);
-  tft.setTextSize(2);
-  tft.println(message);
-}
-
-void startRecording {
-  eventCount = 0;
-  recordingStartTime = millis();
-  isRecording = true;
-  Serial.println("Recording Started");
-}
-
-void stopRecording {
-  if (!isRecording) return;
-  recordingEndTime = millis();
-  isRecording = false;
-  Serial.println("Recording Stopped");
-}
-
-void startPlayback {
-  if (eventCount == 0) {
-    Serial.println("Nothing recorded");
-    showMessage("Nothing recorded");
-    return;
-  } 
-  isPlaying = true;
-  playBackIndex = 0;
-  Serial.println("Playback Started");
-  showMessage("Playback Started");
-}
-
-void stopPlayback {
-  isPlaying = false;
-  for (byte note = 0; note < 128; i++) {
-    MIDIMessage(NOTE_OFF, note, 0);
-  }
-  showMessage("Playback Stopped");
-  Serial.println("Playback Stopped");
-}
-
-void playbackTiming {
-  if (!isPlaying || eventCount == 0) return;
-  unsigned long currentTime = millis() - recordingStartTime;
-  while (playbackIndex < eventCount && 
-    recordedSequence[playbackIndex].timestamp <= currentTime) {
-
-    byte status = recordedSequence[playbackIndex].isNoteOn ? NOTE_ON : NOTE_OFF;
-    byte note = recordedSequence[playbackIndex].note;
-    byte velocity = recordedSequence[playbackIndex].velocity;
-    MIDIMessage(status, note, velocity);
-    playbackIndex++;
-
-    if (playbackIndex >= eventCount) {
-      isPlaying = false;
-      Serial.println("Playback Complete");
-      showMessage("Playback Complete");
-      break;
-      }
-  }
-}
-
-void recordNote(byte status,byte note, byte velocity) {
-  if (!isRecording || eventCount >= MAX_EVENTS) return;
-  if (eventCount < MAX_EVENTS) {
-    recordedSequence[eventCount].note = note;
-    recordedSequence[eventCount].velocity = velocity;
-    recordedSequence[eventCount].isNoteOn = (status == isNoteOn);
-    recordedSequence[eventCount].timestamp = millis() - recordingStartTime;
-    eventCount++;
-  }
-}
-
-void MIDIMessage(int command, int note, int velocity) {
-  Serial1.write(command);
-  Serial1.write(note);
-  Serial1.write(velocity);
-  Serial.println(command);
-  Serial.println(note);
-  Serial.println(velocity);
-  Serial.println("\n");
-  if (isRecording) {
-    recordNote(command, note, velocity);
-  }
 }
 
 void loop() {
@@ -246,283 +409,311 @@ void loop() {
   io.digitalWrite(ROW2_PIN, HIGH);
   io.digitalWrite(ROW1_PIN, LOW);
 
-  int button1State =  io.digitalRead(COLUMN1_PIN);
-  int button2State =  io.digitalRead(COLUMN2_PIN);
-  int button3State =  io.digitalRead(COLUMN3_PIN);
-  int button4State =  io.digitalRead(COLUMN4_PIN);
-  int button5State =  io.digitalRead(COLUMN5_PIN);
-  int button6State =  io.digitalRead(COLUMN6_PIN);
-  int button7State =  io.digitalRead(COLUMN7_PIN);
-  int button8State =  io.digitalRead(COLUMN8_PIN);
-  int button9State =  io.digitalRead(COLUMN9_PIN);
-  int button10State = io.digitalRead(COLUMN10_PIN);
+  int button11State =  io.digitalRead(COLUMN1_PIN);
+  int button12State =  io.digitalRead(COLUMN2_PIN);
+  int button13State =  io.digitalRead(COLUMN3_PIN);
+  int button14State =  io.digitalRead(COLUMN4_PIN);
+  int button15State =  io.digitalRead(COLUMN5_PIN);
+  int button16State =  io.digitalRead(COLUMN6_PIN);
+  int button17State =  io.digitalRead(COLUMN7_PIN);
+  int button18State =  io.digitalRead(COLUMN8_PIN);
+  int button19State =  io.digitalRead(COLUMN9_PIN);
+  int button20State = io.digitalRead(COLUMN10_PIN);
 
-  if (button1State != lastButton1State) {
-    if (button1State != DEFAULT_BUTTON_STATE) {
+  if (button11State != lastButton11State) {
+    if (button11State != DEFAULT_BUTTON_STATE) {
       MIDIMessage(NOTE_ON, BUTTON11_NOTE, VELOCITY);
     } else {
       MIDIMessage(NOTE_OFF, BUTTON11_NOTE, VELOCITY);
     }
   }
 
-  if (button2State != lastButton2State) {
-    if (button2State != DEFAULT_BUTTON_STATE) {
+  if (button12State != lastButton12State) {
+    if (button12State != DEFAULT_BUTTON_STATE) {
       MIDIMessage(NOTE_ON, BUTTON12_NOTE, VELOCITY);
     } else {
       MIDIMessage(NOTE_OFF, BUTTON12_NOTE, VELOCITY);
     }
   }
 
-  if (button3State != lastButton3State) {
-    if (button3State != DEFAULT_BUTTON_STATE) {
-      MIDIMessage(NOTE_ON, BUTTON13_NOTE, VELOCITY);
-    } else {
-      MIDIMessage(NOTE_OFF, BUTTON13_NOTE, VELOCITY);
-    }
+// --- Start Recording (Button14) ---
+if (button13State != lastButton13State) {
+  if (button13State != DEFAULT_BUTTON_STATE) {
+    startRecording();
+    MIDIMessage(NOTE_ON, BUTTON13_NOTE, VELOCITY);
+  } else {
+    MIDIMessage(NOTE_OFF, BUTTON13_NOTE, VELOCITY);
   }
+}
 
-  if (button4State != lastButton4State) {
-    if (button4State != DEFAULT_BUTTON_STATE) {
-      MIDIMessage(NOTE_ON, BUTTON14_NOTE, VELOCITY);
-    } else {
-      MIDIMessage(NOTE_OFF, BUTTON14_NOTE, VELOCITY);
-    }
+// --- Stop Recording (Button15) ---
+if (button14State != lastButton14State) {
+  if (button14State != DEFAULT_BUTTON_STATE) {
+    stopRecording();
+    MIDIMessage(NOTE_ON, BUTTON14_NOTE, VELOCITY);
+    // Save the current recording to the SD card file corresponding to nextRecordingSlot.
+    saveCurrentRecording();
+  } else {
+    MIDIMessage(NOTE_OFF, BUTTON14_NOTE, VELOCITY);
   }
+}
 
-    if (button5State != lastButton5State) {
-    if (button5State != DEFAULT_BUTTON_STATE) {
-      MIDIMessage(NOTE_ON, BUTTON15_NOTE, VELOCITY);
-    } else {
-      MIDIMessage(NOTE_OFF, BUTTON15_NOTE, VELOCITY);
-    }
+if (button15State != lastButton15State) {
+  if (button15State != DEFAULT_BUTTON_STATE) {
+    MIDIMessage(NOTE_ON, 75, VELOCITY);
+    playRecording(1);
+  } else {
+    MIDIMessage(NOTE_OFF, 75, VELOCITY);
   }
+}
 
-  if (button6State != lastButton6State) {
-    if (button6State != DEFAULT_BUTTON_STATE) {
-      // MIDIMessage(NOTE_ON, BUTTON6_NOTE, VELOCITY);
-    } else {
-      // MIDIMessage(NOTE_OFF, BUTTON6_NOTE, VELOCITY);
-    }
+// --- Playback Recording 1 (Button16) ---
+if (button16State != lastButton16State) {
+  if (button16State != DEFAULT_BUTTON_STATE) {
+    MIDIMessage(NOTE_ON, 75, VELOCITY);
+    playRecording(2);
+  } else {
+    MIDIMessage(NOTE_OFF, 75, VELOCITY);
   }
+}
 
-  if (button7State != lastButton7State) {
-    if (button7State != DEFAULT_BUTTON_STATE) {
-      // MIDIMessage(NOTE_ON, BUTTON7_NOTE, VELOCITY);
-    } else {
-      // MIDIMessage(NOTE_OFF, BUTTON7_NOTE, VELOCITY);
-    }
+// --- Playback Recording 2 (Button17) ---
+if (button17State != lastButton17State) {
+  if (button17State != DEFAULT_BUTTON_STATE) {
+    MIDIMessage(NOTE_ON, 76, VELOCITY);
+    playRecording(3);
+  } else {
+    MIDIMessage(NOTE_OFF, 76, VELOCITY);
   }
+}
 
-  if (button8State != lastButton8State) {
-    if (button8State != DEFAULT_BUTTON_STATE) {
-      // MIDIMessage(NOTE_ON, BUTTON8_NOTE, VELOCITY);
-    } else {
-      // MIDIMessage(NOTE_OFF, BUTTON8_NOTE, VELOCITY);
-    }
+// --- Playback Recording 3 (Button18) ---
+if (button18State != lastButton18State) {
+  if (button18State != DEFAULT_BUTTON_STATE) {
+    MIDIMessage(NOTE_ON, 77, VELOCITY);
+    playRecording(4);
+  } else {
+    MIDIMessage(NOTE_OFF, 77, VELOCITY);
   }
+}
 
-  if (button9State != lastButton9State) {
-    if (button9State != DEFAULT_BUTTON_STATE) {
-      // MIDIMessage(NOTE_ON, BUTTON9_NOTE, VELOCITY);
-    } else {
-      // MIDIMessage(NOTE_OFF, BUTTON9_NOTE, VELOCITY);
-    }
+// --- Playback Recording 4 (Button19) ---
+if (button19State != lastButton19State) {
+  if (button19State != DEFAULT_BUTTON_STATE) {
+    MIDIMessage(NOTE_ON, 78, VELOCITY);
+    playRecording(5);
+  } else {
+    MIDIMessage(NOTE_OFF, 78, VELOCITY);
   }
+}
 
-  if (button10State != lastButton10State) {
-    if (button10State != DEFAULT_BUTTON_STATE) {
-      // MIDIMessage(NOTE_ON, BUTTON10_NOTE, VELOCITY);
-    } else {
-      // MIDIMessage(NOTE_OFF, BUTTON10_NOTE, VELOCITY);
-    }
+// --- Playback Recording 5 (Button20) ---
+if (button20State != lastButton20State) {
+  if (button20State != DEFAULT_BUTTON_STATE) {
+    MIDIMessage(NOTE_ON, 79, VELOCITY);
+    playRecording();
+  } else {
+    MIDIMessage(NOTE_OFF, 79, VELOCITY);
   }
+}
 
-  lastButton1State =  button1State;
-  lastButton2State =  button2State;
-  lastButton3State =  button3State;
-  lastButton4State =  button4State;
-  lastButton5State =  button5State;
-  lastButton6State =  button6State;
-  lastButton7State =  button7State;
-  lastButton8State =  button8State;
-  lastButton9State =  button9State;
-  lastButton10State = button10State;
+if (button20State != lastButton20State) {
+  if (button20State != DEFAULT_BUTTON_STATE) {
+    MIDIMessage(NOTE_ON, 79, VELOCITY);
+    tft.fillScreen(TFT_BLACK);
+    tft.setCursor(0,0,4);
+    tft.setTextColor(TFT_WHITE);
+    tft.println("Normal Mode"); 
+  } else {
+    MIDIMessage(NOTE_OFF, 79, VELOCITY);
+  }
+}
 
-  digitalWrite(ROW1_PIN, HIGH);
-  digitalWrite(ROW2_PIN, LOW);
+  lastButton11State =  button11State;
+  lastButton12State =  button12State;
+  lastButton13State =  button13State;
+  lastButton14State =  button14State;
+  lastButton15State =  button15State;
+  lastButton16State =  button16State;
+  lastButton17State =  button17State;
+  lastButton18State =  button18State;
+  lastButton19State =  button19State;
+  lastButton20State = button20State;
 
-  int button11State = io.digitalRead(COLUMN1_PIN);
-  int button12State = io.digitalRead(COLUMN2_PIN);
-  int button13State = io.digitalRead(COLUMN3_PIN);
-  int button14State = io.digitalRead(COLUMN4_PIN);
-  int button15State = io.digitalRead(COLUMN5_PIN);
-  int button16State = io.digitalRead(COLUMN6_PIN);
-  int button17State = io.digitalRead(COLUMN7_PIN);
-  int button18State = io.digitalRead(COLUMN8_PIN);
-  int button19State = io.digitalRead(COLUMN9_PIN);
-  int button20State = io.digitalRead(COLUMN10_PIN);
+  io.digitalWrite(ROW1_PIN, HIGH);
+  io.digitalWrite(ROW2_PIN, LOW);
 
-  if (button11State != lastButton11State) {
-    if (button11State != DEFAULT_BUTTON_STATE) {
+  int button1State = io.digitalRead(COLUMN1_PIN);
+  int button2State = io.digitalRead(COLUMN2_PIN);
+  int button3State = io.digitalRead(COLUMN3_PIN);
+  int button4State = io.digitalRead(COLUMN4_PIN);
+  int button5State = io.digitalRead(COLUMN5_PIN);
+  int button6State = io.digitalRead(COLUMN6_PIN);
+  int button7State = io.digitalRead(COLUMN7_PIN);
+  int button8State = io.digitalRead(COLUMN8_PIN);
+  int button9State = io.digitalRead(COLUMN9_PIN);
+  int button10State = io.digitalRead(COLUMN10_PIN);
+
+  if (button1State != lastButton1State) {
+    if (button1State != DEFAULT_BUTTON_STATE) {
       MIDIMessage(NOTE_ON, BUTTON1_NOTE, VELOCITY);
     } else {
       MIDIMessage(NOTE_OFF, BUTTON1_NOTE, VELOCITY);
     }
   }
 
-  if (button12State != lastButton12State) {
-    if (button12State != DEFAULT_BUTTON_STATE) {
+  if (button2State != lastButton2State) {
+    if (button2State != DEFAULT_BUTTON_STATE) {
       MIDIMessage(NOTE_ON, BUTTON2_NOTE, VELOCITY);
     } else {
       MIDIMessage(NOTE_OFF, BUTTON2_NOTE, VELOCITY);
     }
   }
 
-  if (button13State != lastButton13State) {
-    if (button13State != DEFAULT_BUTTON_STATE) {
+  if (button3State != lastButton3State) {
+    if (button3State != DEFAULT_BUTTON_STATE) {
       MIDIMessage(NOTE_ON, BUTTON3_NOTE, VELOCITY);
     } else {
       MIDIMessage(NOTE_OFF, BUTTON3_NOTE, VELOCITY);
     }
   }
 
-  if (button14State != lastButton14State) {
-    if (button14State != DEFAULT_BUTTON_STATE) {
+  if (button4State != lastButton4State) {
+    if (button4State != DEFAULT_BUTTON_STATE) {
       MIDIMessage(NOTE_ON, BUTTON4_NOTE, VELOCITY);
     } else {
       MIDIMessage(NOTE_OFF, BUTTON4_NOTE, VELOCITY);
     }
   }
 
-    if (button15State != lastButton15State) {
-    if (button15State != DEFAULT_BUTTON_STATE) {
+  if (button5State != lastButton5State) {
+    if (button5State != DEFAULT_BUTTON_STATE) {
       MIDIMessage(NOTE_ON, BUTTON5_NOTE, VELOCITY);
     } else {
       MIDIMessage(NOTE_OFF, BUTTON5_NOTE, VELOCITY);
     }
   }
 
-  if (button16State != lastButton16State) {
-    if (button16State != DEFAULT_BUTTON_STATE) {
+  if (button6State != lastButton6State) {
+    if (button6State != DEFAULT_BUTTON_STATE) {
       MIDIMessage(NOTE_ON, BUTTON6_NOTE, VELOCITY);
     } else {
       MIDIMessage(NOTE_OFF, BUTTON6_NOTE, VELOCITY);
     }
   }
 
-  if (button17State != lastButton17State) {
-    if (button17State != DEFAULT_BUTTON_STATE) {
+  if (button7State != lastButton7State) {
+    if (button7State != DEFAULT_BUTTON_STATE) {
       MIDIMessage(NOTE_ON, BUTTON7_NOTE, VELOCITY);
-      Serial.println("Button 17 pressed");
-      if (!isRecording) {
-        if (isPlaying) {
-          stopPlayback();
-        }
-        startRecording();
-      } else {
-        stopRecording();
-      }
     } else {
       MIDIMessage(NOTE_OFF, BUTTON7_NOTE, VELOCITY);
     }
   }
 
-  if (button18State != lastButton18State) {
-    if (button18State != DEFAULT_BUTTON_STATE) {
+  if (button8State != lastButton8State) {
+    if (button8State != DEFAULT_BUTTON_STATE) {
       MIDIMessage(NOTE_ON, BUTTON8_NOTE, VELOCITY);
-      Serial.println("Button 18 pressed");
-      showMessage("Recording Stopped")
-      if (isRecording) {
-        stopRecording();
-      }
-      }
-      else {
-        MIDIMessage(NOTE_OFF, BUTTON8_NOTE, VELOCITY);
+    } else {
+      MIDIMessage(NOTE_OFF, BUTTON8_NOTE, VELOCITY);
     }
   }
 
-  if (button19State != lastButton19State) {
-    if (button19State != DEFAULT_BUTTON_STATE) {
+  if (button9State != lastButton9State) {
+    if (button9State != DEFAULT_BUTTON_STATE) {
       MIDIMessage(NOTE_ON, BUTTON9_NOTE, VELOCITY);
-      Serial.println("Button 19 pressed");
-      showMessage("Playback Started");
-      if (!isPlaying) {
-        startPlayback();
-      } else {
-        stopPlayback();
-      }
     } else {
       MIDIMessage(NOTE_OFF, BUTTON9_NOTE, VELOCITY);
     }
   }
 
-  if (button20State != lastButton20State) {
-    if (button20State != DEFAULT_BUTTON_STATE) {
+  if (button10State != lastButton10State) {
+    if (button10State != DEFAULT_BUTTON_STATE) {
       MIDIMessage(NOTE_ON, BUTTON10_NOTE, VELOCITY);
     } else {
       MIDIMessage(NOTE_OFF, BUTTON10_NOTE, VELOCITY);
     }
   }
 
-  lastButton11State = button11State;
-  lastButton12State = button12State;
-  lastButton13State = button13State;
-  lastButton14State = button14State;
-  lastButton15State = button15State;
-  lastButton16State = button16State;
-  lastButton17State = button17State;
-  lastButton18State = button18State;
-  lastButton19State = button19State;
-  lastButton20State = button20State;
+  lastButton1State = button1State;
+  lastButton2State = button2State;
+  lastButton3State = button3State;
+  lastButton4State = button4State;
+  lastButton5State = button5State;
+  lastButton6State = button6State;
+  lastButton7State = button7State;
+  lastButton8State = button8State;
+  lastButton9State = button9State;
+  lastButton10State = button10State;
 
-  playbackTiming();
-  delay(10);
-  
+  // String buttonsPressedString = "";
+
+  tft.fillScreen(TFT_BLACK);
+  tft.setCursor(0,0,4);
+  tft.setTextColor(TFT_WHITE);
+  tft.println("Normal Mode"); 
+  tft.println("Buttons Pressed: "); 
+
+  if (lastButton1State != DEFAULT_BUTTON_STATE) {
+    tft.print("1 "); 
+  }
+  if (lastButton2State != DEFAULT_BUTTON_STATE) {
+    tft.print("2 "); 
+  }
+  if (lastButton3State != DEFAULT_BUTTON_STATE) {
+    tft.print("3 "); 
+  }
+  if (lastButton4State != DEFAULT_BUTTON_STATE) {
+    tft.print("4 "); 
+  }
+  if (lastButton5State != DEFAULT_BUTTON_STATE) {
+    tft.print("5 "); 
+  }
+  if (lastButton6State != DEFAULT_BUTTON_STATE) {
+    tft.print("6 "); 
+  }
+  if (lastButton7State != DEFAULT_BUTTON_STATE) {
+    tft.print("7 "); 
+  }
+  if (lastButton8State != DEFAULT_BUTTON_STATE) {
+    tft.print("8 "); 
+  }
+  if (lastButton9State != DEFAULT_BUTTON_STATE) {
+    tft.print("9 "); 
+  }
+  if (lastButton10State != DEFAULT_BUTTON_STATE) {
+    tft.print("10 "); 
+  }
+  if (lastButton11State != DEFAULT_BUTTON_STATE) {
+    tft.print("11 "); 
+  }
+  if (lastButton12State != DEFAULT_BUTTON_STATE) {
+    tft.print("12 "); 
+  }
+  if (lastButton13State != DEFAULT_BUTTON_STATE) {
+    tft.print("13 "); 
+  }
+  if (lastButton14State != DEFAULT_BUTTON_STATE) {
+    tft.print("14 "); 
+  }
+  if (lastButton15State != DEFAULT_BUTTON_STATE) {
+    tft.print("15 "); 
+  }
+  if (lastButton16State != DEFAULT_BUTTON_STATE) {
+    tft.print("16 "); 
+  }
+  if (lastButton17State != DEFAULT_BUTTON_STATE) {
+    tft.print("17 "); 
+  }
+  if (lastButton18State != DEFAULT_BUTTON_STATE) {
+    tft.print("18 "); 
+  }
+  if (lastButton19State != DEFAULT_BUTTON_STATE) {
+    tft.print("19 "); 
+  }
+  if (lastButton20State != DEFAULT_BUTTON_STATE) {
+    tft.print("20 "); 
+  }
+
+
+  delay(50);
 }
-
-// #include "FS.h"
-// #include "SD.h"
-// #include "SPI.h"
-
-// int SD_CS_PIN = 10;  // Use GPIO 10 as Chip Select (CS)
-
-// void listDir(fs::FS &fs, const char *dirname, uint8_t levels) {
-//     Serial.printf("Listing directory: %s\n", dirname);
-//     File root = fs.open(dirname);
-//     if (!root) {
-//         Serial.println("Failed to open directory");
-//         return;
-//     }
-//     if (!root.isDirectory()) {
-//         Serial.println("Not a directory");
-//         return;
-//     }
-//     File file = root.openNextFile();
-//     while (file) {
-//         Serial.printf("%s - SIZE: %d bytes\n", file.name(), file.size());
-//         file = root.openNextFile();
-//     }
-// }
-
-
-// void setup() {
-//     Serial.begin(115200);
-    
-
-//     Serial.println("Initializing SD card...");
-//     SPI.begin(12, 36, 26, SD_CS_PIN);
-//     SPI.setFrequency(1000000);  
-
-//     if (!SD.begin(SD_CS_PIN)) {
-//         Serial.println("SD card initialization failed!");
-//         return;
-//     }
-//     Serial.println("SD card initialized successfully.");
-// }
-
-// void loop() {
-//     // No loop actions needed
-// }
-
-
-// mosi is spid
