@@ -16,8 +16,8 @@
 #define ROW1_PIN 0
 #define ROW2_PIN 1
 
-#define COLUMN1_PIN 2
-#define COLUMN2_PIN 3
+#define COLUMN1_PIN 2 
+#define COLUMN2_PIN 3 
 #define COLUMN3_PIN 4
 #define COLUMN4_PIN 5
 #define COLUMN5_PIN 6
@@ -28,26 +28,31 @@
 #define COLUMN10_PIN 11
 
 // MIDI Notes mapping
-#define BUTTON1_NOTE 60  // C4
-#define BUTTON2_NOTE 61  // D4
-#define BUTTON3_NOTE 62  // E4
-#define BUTTON4_NOTE 63  // F4
-#define BUTTON5_NOTE 64  // G4
-#define BUTTON6_NOTE 65  // A4
-#define BUTTON7_NOTE 66  // B4
-#define BUTTON11_NOTE 67 // C5
-#define BUTTON12_NOTE 68 // D5
-#define BUTTON13_NOTE 69 // E5
-#define BUTTON14_NOTE 70 // F5
-#define BUTTON15_NOTE 71 // G5
-#define BUTTON16_NOTE 72 // A5
-#define BUTTON17_NOTE 73 // B5
-#define BUTTON18_NOTE 74 // C6
+
+#define BUTTON1_NOTE 74  // C2
+#define BUTTON2_NOTE 73  // D2
+#define BUTTON3_NOTE 72  // E2
+#define BUTTON4_NOTE 71  // F2
+#define BUTTON5_NOTE 70  // G2
+#define BUTTON6_NOTE 69  // A2
+#define BUTTON7_NOTE 68  // B2
+#define BUTTON8_NOTE 67  // C3
+
+#define BUTTON11_NOTE 66 // C3
+#define BUTTON12_NOTE 65 // D3
+#define BUTTON13_NOTE 64 // E3
+#define BUTTON14_NOTE 63 // F3
+#define BUTTON15_NOTE 62 // G3
+#define BUTTON16_NOTE 61 // A3
+#define BUTTON17_NOTE 60 // B3
+
+
+
 
 // Control buttons
-#define BUTTON8_NOTE 90  // Playback pre-programmed song
-#define BUTTON9_NOTE 91  // Playback recorded song 1
-#define BUTTON10_NOTE 92 // Playback recorded song 2
+#define BUTTON9_NOTE 90  // Playback pre-programmed song
+#define BUTTON10_NOTE 91  // Playback recorded song 1
+#define BUTTON18_NOTE 92 // Playback recorded song 2
 #define BUTTON19_NOTE 93 // Start recording
 #define BUTTON20_NOTE 94 // Stop recording & save
 
@@ -66,7 +71,7 @@
 #define NOTE_ON  144
 #define NOTE_OFF 128
 
-#define MAX_SONGS 2
+#define MAX_SONGS 3 // Maximum number of songs to record
 #define MAX_EVENTS 500  // Increased maximum events per song
 
 // SX1509 I2C address (set by ADDR1 and ADDR0 (00 by default):
@@ -106,15 +111,46 @@ int eventCount = 0;
 int playBackIndex = 0;
 int nextRecordingSlot = 1;  // Auto-increment through slots 1-2
 
-// Pre-programmed song (simple melody)
-const int PREPROGRAMMED_SONG_LENGTH = 16;
-byte preProgSongNotes[PREPROGRAMMED_SONG_LENGTH] = {
-  60, 62, 64, 65, 67, 67, 67, 0,  // First part of melody (with rest)
-  65, 65, 65, 0, 64, 64, 64, 0    // Second part of melody (with rests)
+const int MIA_SEBASTIANS_THEME_LENGTH = 32;
+
+// A simplified melody (example):
+// These note values (in MIDI numbers) roughly translate to pitches (E4 = 64, F4 = 65, G4 = 67, A4 = 69, etc.)
+byte preProgSongNotes[MIA_SEBASTIANS_THEME_LENGTH] = {
+  // First phrase
+  64, 64, 65, 67,  // E,  E,  F,  G
+  69, 67, 65, 64,  // A,  G,  F,  E
+  
+  // Second phrase
+  60, 60, 64, 62,  // C,  C,  E,  D
+  60, 60, 64, 62,  // C,  C,  E,  D
+  
+  // Third phrase
+  64, 64, 65, 67,  // E,  E,  F,  G
+  69, 67, 65, 64,  // A,  G,  F,  E
+  
+  // Final phrase with a rest at the end
+  60, 60, 67, 67,  // C,  C,  G,  G
+  69, 69, 64, 0    // A,  A,  E,  (rest)
 };
-unsigned long preProgSongDurations[PREPROGRAMMED_SONG_LENGTH] = {
-  250, 250, 250, 250, 250, 250, 500, 250,  // Note durations in ms
-  250, 250, 500, 250, 250, 250, 500, 250
+
+// Durations for each note (in milliseconds)
+// The durations below are set to produce a rhythmic phrasing; you may tweak them for timing nuances.
+unsigned long preProgSongDurations[MIA_SEBASTIANS_THEME_LENGTH] = {
+  // First phrase durations
+  300, 300, 300, 300,
+  600, 300, 300, 600,
+  
+  // Second phrase durations
+  300, 300, 300, 300,
+  600, 300, 300, 600,
+  
+  // Third phrase durations
+  300, 300, 300, 300,
+  600, 300, 300, 600,
+  
+  // Final phrase durations
+  300, 300, 300, 300,
+  600, 300, 300, 600
 };
 
 struct Song {
@@ -310,7 +346,7 @@ void playPreProgrammedSong() {
   tft.println("Playing Demo Song");
   
   // Play the pre-programmed song
-  for (int i = 0; i < PREPROGRAMMED_SONG_LENGTH; i++) {
+  for (int i = 0; i < MIA_SEBASTIANS_THEME_LENGTH; i++) {
     if (preProgSongNotes[i] > 0) {  // If not a rest
       // Note On
       Serial1.write(NOTE_ON);
@@ -595,19 +631,21 @@ void loop() {
   if (button8State != lastButton8State) {
     if (button8State != DEFAULT_BUTTON_STATE) {
       MIDIMessage(NOTE_ON, BUTTON8_NOTE, VELOCITY);
-      playPreProgrammedSong();  // Play demo melody
     } else {
       MIDIMessage(NOTE_OFF, BUTTON8_NOTE, VELOCITY);
     }
     lastButton8State = button8State;
   }
 
-  // Button 9 - Play recorded song 1
+  // Button 9 - Play recorded song 2
   if (button9State != lastButton9State) {
     if (button9State != DEFAULT_BUTTON_STATE) {
       MIDIMessage(NOTE_ON, BUTTON9_NOTE, VELOCITY);
       if (!isRecording && !isPlaying) {
-        playRecording(1);  // Play recording from slot 1
+        playRecording(2);  // Play recording from slot 1
+      }
+      if (isPlaying) {
+        stopPlayback();
       }
     } else {
       MIDIMessage(NOTE_OFF, BUTTON9_NOTE, VELOCITY);
@@ -615,12 +653,15 @@ void loop() {
     lastButton9State = button9State;
   }
 
-  // Button 10 - Play recorded song 2
+  // Button 10 - Play recorded song 3
   if (button10State != lastButton10State) {
     if (button10State != DEFAULT_BUTTON_STATE) {
       MIDIMessage(NOTE_ON, BUTTON10_NOTE, VELOCITY);
       if (!isRecording && !isPlaying) {
-        playRecording(2);  // Play recording from slot 2
+        playRecording(3);  // Play recording from slot 2
+      }
+      if (isPlaying) {
+        stopPlayback();
       }
     } else {
       MIDIMessage(NOTE_OFF, BUTTON10_NOTE, VELOCITY);
@@ -710,35 +751,42 @@ void loop() {
   if (button18State != lastButton18State) {
     if (button18State != DEFAULT_BUTTON_STATE) {
       MIDIMessage(NOTE_ON, BUTTON18_NOTE, VELOCITY);
+      if (!isRecording && !isPlaying) {
+        playRecording(1);  // Play recording from slot 1
+      }
+      if (isPlaying) {
+        stopPlayback();
+      }
     } else {
       MIDIMessage(NOTE_OFF, BUTTON18_NOTE, VELOCITY);
     }
     lastButton18State = button18State;
   }
 
-  // Button 19 - Start Recording
+  // Button 19 - Play Pre-programmed song
   if (button19State != lastButton19State) {
     if (button19State != DEFAULT_BUTTON_STATE) {
       MIDIMessage(NOTE_ON, BUTTON19_NOTE, VELOCITY);
-      if (!isPlaying) {
-        startRecording();
-      }
+      playPreProgrammedSong();  // Play demo melody
     } else {
       MIDIMessage(NOTE_OFF, BUTTON19_NOTE, VELOCITY);
     }
     lastButton19State = button19State;
   }
 
-  // Button 20 - Stop Recording/Playback
+  // Button 20 - Start/Stop Recording/Playback
   if (button20State != lastButton20State) {
     if (button20State != DEFAULT_BUTTON_STATE) {
       MIDIMessage(NOTE_ON, BUTTON20_NOTE, VELOCITY);
+      if (!isPlaying) {
+        startRecording();
+      }
       if (isRecording) {
         stopRecording();
       }
-      if (isPlaying) {
-        stopPlayback();
-      }
+      // if (isPlaying) {
+      //   stopPlayback();
+      // }
     } else {
       MIDIMessage(NOTE_OFF, BUTTON20_NOTE, VELOCITY);
     }
@@ -758,55 +806,74 @@ void loop() {
     
     // Check which buttons are pressed
     if (button1State != DEFAULT_BUTTON_STATE) {
-      tft.print("1 ");
+      //tft.print("1 ");
+      tft.print("C2 ");
     }
     if (button2State != DEFAULT_BUTTON_STATE) {
-      tft.print("2 ");
+      //tft.print("2 ");
+      tft.print("D2 ");
     }
     if (button3State != DEFAULT_BUTTON_STATE) {
-      tft.print("3 ");
+      //tft.print("3 ");
+      tft.print("E2 ");
     }
     if (button4State != DEFAULT_BUTTON_STATE) {
-      tft.print("4 ");
+      //tft.print("4 ");
+      tft.print("F2 ");
     }
     if (button5State != DEFAULT_BUTTON_STATE) {
-      tft.print("5 ");
+      //tft.print("5 ");
+      tft.print("G2 ");
     }
     if (button6State != DEFAULT_BUTTON_STATE) {
-      tft.print("6 ");
+      //tft.print("6 ");
+      tft.print("A2 ");
     }
     if (button7State != DEFAULT_BUTTON_STATE) {
-      tft.print("7 ");
+      //tft.print("7 ");
+      tft.print("B2 ");
+    }
+    if (button8State != DEFAULT_BUTTON_STATE) {
+      //tft.print("8 ");
+      tft.print("C3 ");
     }
     if (button11State != DEFAULT_BUTTON_STATE) {
-      tft.print("11 ");
+      //tft.print("11 ");
+      tft.print("D3 ");
+
     }
     if (button12State != DEFAULT_BUTTON_STATE) {
-      tft.print("12 ");
+      //tft.print("12 ");
+      tft.print("E3 ");
     }
     if (button13State != DEFAULT_BUTTON_STATE) {
-      tft.print("13 ");
+      //tft.print("13 ");
+      tft.print("F3 ");
     }
     if (button14State != DEFAULT_BUTTON_STATE) {
-      tft.print("14 ");
+      //tft.print("14 ");
+      tft.print("G3 ");
     }
     if (button15State != DEFAULT_BUTTON_STATE) {
-      tft.print("15 ");
+      //tft.print("15 ");
+      tft.print("A4 ");
     }
     if (button16State != DEFAULT_BUTTON_STATE) {
-      tft.print("16 ");
+      //tft.print("16 ");
+      tft.print("B3 ");
     }
     if (button17State != DEFAULT_BUTTON_STATE) {
-      tft.print("17 ");
+      //tft.print("17 ");
+      tft.print("C4 ");
     }
     if (button18State != DEFAULT_BUTTON_STATE) {
-      tft.print("18 ");
+      //tft.print("18 ");
     }
     if (button19State != DEFAULT_BUTTON_STATE) {
-      tft.print("19 ");
+      //tft.print("19 ");
     }
     if (button20State != DEFAULT_BUTTON_STATE) {
-      tft.print("20 ");
+      //tft.print("20 ");
     }
   }
   // Short delay to prevent excessive CPU usage and debounce the buttons
