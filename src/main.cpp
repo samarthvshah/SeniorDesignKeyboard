@@ -29,30 +29,32 @@
 
 // MIDI Notes mapping
 
-#define BUTTON1_NOTE 74  // C2
-#define BUTTON2_NOTE 73  // D2
-#define BUTTON3_NOTE 72  // E2
-#define BUTTON4_NOTE 71  // F2
-#define BUTTON5_NOTE 70  // G2
-#define BUTTON6_NOTE 69  // A2
-#define BUTTON7_NOTE 68  // B2
-#define BUTTON8_NOTE 67  // C3
+#define BUTTON1_NOTE 48  // C2
+#define BUTTON2_NOTE 50  // D2
+#define BUTTON3_NOTE 52  // E2
+#define BUTTON4_NOTE 53  // F2
+#define BUTTON5_NOTE 55  // G2
+#define BUTTON6_NOTE 57  // A2
+#define BUTTON7_NOTE 59  // B2
 
-#define BUTTON11_NOTE 66 // C3
-#define BUTTON12_NOTE 65 // D3
-#define BUTTON13_NOTE 64 // E3
-#define BUTTON14_NOTE 63 // F3
-#define BUTTON15_NOTE 62 // G3
-#define BUTTON16_NOTE 61 // A3
-#define BUTTON17_NOTE 60 // B3
+
+#define BUTTON11_NOTE 60 // C4
+#define BUTTON12_NOTE 62 // D4
+#define BUTTON13_NOTE 64 // E4
+#define BUTTON14_NOTE 65 // F4
+#define BUTTON15_NOTE 67 // G4
+#define BUTTON16_NOTE 69 // A4
+#define BUTTON17_NOTE 71 // B4
+#define BUTTON18_NOTE 72 // C5
 
 
 
 
 // Control buttons
+#define BUTTON8_NOTE 89  // Playback pre-programmed song
 #define BUTTON9_NOTE 90  // Playback pre-programmed song
 #define BUTTON10_NOTE 91  // Playback recorded song 1
-#define BUTTON18_NOTE 92 // Playback recorded song 2
+// #define BUTTON18_NOTE 92 // Playback recorded song 2
 #define BUTTON19_NOTE 93 // Start recording
 #define BUTTON20_NOTE 94 // Stop recording & save
 
@@ -249,6 +251,9 @@ void stopRecording() {
   
   // Rotate between slots 1 and 2
   nextRecordingSlot = (nextRecordingSlot % MAX_SONGS) + 1;
+  // Option 2: Using a ternary operator
+  //nextRecordingSlot = (nextRecordingSlot == 2) ? 3 : 2;
+
   
   delay(1000);  // Brief delay to show message
   
@@ -442,11 +447,14 @@ void playRecording(int slot) {
     recordingStartTime = millis();
     
     // Update display
-    tft.fillScreen(TFT_BLACK);
-    tft.setCursor(0, 0, 4);
-    tft.setTextColor(TFT_GREEN);
-    tft.print("Playing Recording ");
-    tft.println(slot);
+    else {
+      tft.fillScreen(TFT_BLACK);
+      tft.setCursor(0, 0, 4);
+      tft.setTextColor(TFT_GREEN);
+      tft.print("Playing Recording ");
+      tft.println(slot);
+    }
+
     delay(1000);  // Brief delay to show message
     // Start playback (timing handled in loop)
     startPlayback();
@@ -627,22 +635,24 @@ void loop() {
     lastButton7State = button7State;
   }
 
-  // Button 8 - Play pre-programmed song
+  // Button 8 - Play recorded song 1
   if (button8State != lastButton8State) {
     if (button8State != DEFAULT_BUTTON_STATE) {
       MIDIMessage(NOTE_ON, BUTTON8_NOTE, VELOCITY);
+      playRecording(5);  // Play recording from slot 5, la la land
+      //playPreProgrammedSong();  // Play demo melody
     } else {
       MIDIMessage(NOTE_OFF, BUTTON8_NOTE, VELOCITY);
     }
     lastButton8State = button8State;
   }
 
-  // Button 9 - Play recorded song 2
+  // Button 9 - Play recorded song 1
   if (button9State != lastButton9State) {
     if (button9State != DEFAULT_BUTTON_STATE) {
       MIDIMessage(NOTE_ON, BUTTON9_NOTE, VELOCITY);
       if (!isRecording && !isPlaying) {
-        playRecording(2);  // Play recording from slot 1
+        playRecording(1);  // Play recording from slot 1
       }
       if (isPlaying) {
         stopPlayback();
@@ -658,7 +668,7 @@ void loop() {
     if (button10State != DEFAULT_BUTTON_STATE) {
       MIDIMessage(NOTE_ON, BUTTON10_NOTE, VELOCITY);
       if (!isRecording && !isPlaying) {
-        playRecording(3);  // Play recording from slot 2
+        playRecording(2);  // Play recording from slot 2
       }
       if (isPlaying) {
         stopPlayback();
@@ -751,23 +761,19 @@ void loop() {
   if (button18State != lastButton18State) {
     if (button18State != DEFAULT_BUTTON_STATE) {
       MIDIMessage(NOTE_ON, BUTTON18_NOTE, VELOCITY);
-      if (!isRecording && !isPlaying) {
-        playRecording(1);  // Play recording from slot 1
-      }
-      if (isPlaying) {
-        stopPlayback();
-      }
     } else {
       MIDIMessage(NOTE_OFF, BUTTON18_NOTE, VELOCITY);
     }
     lastButton18State = button18State;
   }
 
-  // Button 19 - Play Pre-programmed song
+  // Button 19 - start recording
   if (button19State != lastButton19State) {
     if (button19State != DEFAULT_BUTTON_STATE) {
       MIDIMessage(NOTE_ON, BUTTON19_NOTE, VELOCITY);
-      playPreProgrammedSong();  // Play demo melody
+      if (!isPlaying) {
+        startRecording();
+      }
     } else {
       MIDIMessage(NOTE_OFF, BUTTON19_NOTE, VELOCITY);
     }
@@ -778,11 +784,11 @@ void loop() {
   if (button20State != lastButton20State) {
     if (button20State != DEFAULT_BUTTON_STATE) {
       MIDIMessage(NOTE_ON, BUTTON20_NOTE, VELOCITY);
-      if (!isPlaying) {
-        startRecording();
-      }
       if (isRecording) {
         stopRecording();
+      }
+      if (isPlaying) {
+        stopPlayback();
       }
       // if (isPlaying) {
       //   stopPlayback();
@@ -807,67 +813,68 @@ void loop() {
     // Check which buttons are pressed
     if (button1State != DEFAULT_BUTTON_STATE) {
       //tft.print("1 ");
-      tft.print("C2 ");
+      tft.print("C3 ");
     }
     if (button2State != DEFAULT_BUTTON_STATE) {
       //tft.print("2 ");
-      tft.print("D2 ");
+      tft.print("D3 ");
     }
     if (button3State != DEFAULT_BUTTON_STATE) {
       //tft.print("3 ");
-      tft.print("E2 ");
+      tft.print("E3 ");
     }
     if (button4State != DEFAULT_BUTTON_STATE) {
       //tft.print("4 ");
-      tft.print("F2 ");
+      tft.print("F3 ");
     }
     if (button5State != DEFAULT_BUTTON_STATE) {
       //tft.print("5 ");
-      tft.print("G2 ");
+      tft.print("G3 ");
     }
     if (button6State != DEFAULT_BUTTON_STATE) {
       //tft.print("6 ");
-      tft.print("A2 ");
+      tft.print("A3 ");
     }
     if (button7State != DEFAULT_BUTTON_STATE) {
       //tft.print("7 ");
-      tft.print("B2 ");
+      tft.print("B3 ");
     }
     if (button8State != DEFAULT_BUTTON_STATE) {
       //tft.print("8 ");
-      tft.print("C3 ");
+      //tft.print("C3 ");
     }
     if (button11State != DEFAULT_BUTTON_STATE) {
       //tft.print("11 ");
-      tft.print("D3 ");
+      tft.print("C4 ");
 
     }
     if (button12State != DEFAULT_BUTTON_STATE) {
       //tft.print("12 ");
-      tft.print("E3 ");
+      tft.print("D4 ");
     }
     if (button13State != DEFAULT_BUTTON_STATE) {
       //tft.print("13 ");
-      tft.print("F3 ");
+      tft.print("E4 ");
     }
     if (button14State != DEFAULT_BUTTON_STATE) {
       //tft.print("14 ");
-      tft.print("G3 ");
+      tft.print("F4 ");
     }
     if (button15State != DEFAULT_BUTTON_STATE) {
       //tft.print("15 ");
-      tft.print("A4 ");
+      tft.print("G4 ");
     }
     if (button16State != DEFAULT_BUTTON_STATE) {
       //tft.print("16 ");
-      tft.print("B3 ");
+      tft.print("A4 ");
     }
     if (button17State != DEFAULT_BUTTON_STATE) {
       //tft.print("17 ");
-      tft.print("C4 ");
+      tft.print("B4 ");
     }
     if (button18State != DEFAULT_BUTTON_STATE) {
       //tft.print("18 ");
+      tft.print("C5 ");
     }
     if (button19State != DEFAULT_BUTTON_STATE) {
       //tft.print("19 ");
