@@ -447,13 +447,7 @@ void playRecording(int slot) {
     recordingStartTime = millis();
     
     // Update display
-    else {
-      tft.fillScreen(TFT_BLACK);
-      tft.setCursor(0, 0, 4);
-      tft.setTextColor(TFT_GREEN);
-      tft.print("Playing Recording ");
-      tft.println(slot);
-    }
+    
 
     delay(1000);  // Brief delay to show message
     // Start playback (timing handled in loop)
