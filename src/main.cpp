@@ -74,7 +74,7 @@
 #define NOTE_OFF 128
 
 #define MAX_SONGS 3 // Maximum number of songs to record
-#define MAX_EVENTS 500  // Increased maximum events per song
+#define MAX_EVENTS 2500  // Increased maximum events per song
 
 // SX1509 I2C address (set by ADDR1 and ADDR0 (00 by default):
 const byte SX1509_ADDRESS = 0x3E; // SX1509 I2C address
@@ -111,7 +111,7 @@ bool isPlaying = false;
 unsigned long recordingStartTime = 0;
 int eventCount = 0;
 int playBackIndex = 0;
-int nextRecordingSlot = 1;  // Auto-increment through slots 1-2
+int nextRecordingSlot = 3;  // Auto-increment through slots 1-2
 
 const int MIA_SEBASTIANS_THEME_LENGTH = 32;
 
@@ -250,7 +250,8 @@ void stopRecording() {
   tft.println(nextRecordingSlot);
   
   // Rotate between slots 1 and 2
-  nextRecordingSlot = (nextRecordingSlot % MAX_SONGS) + 1;
+  //nextRecordingSlot = (nextRecordingSlot % MAX_SONGS) + 1;
+  nextRecordingSlot = 2;
   // Option 2: Using a ternary operator
   //nextRecordingSlot = (nextRecordingSlot == 2) ? 3 : 2;
 
@@ -284,6 +285,7 @@ void startPlayback() {
   tft.println("Playing Recording ");
 
 }
+
 
 void stopPlayback() {
   isPlaying = false;
@@ -339,6 +341,30 @@ void playbackTiming() {
     }
   }
 }
+
+void resetButtonStates() {
+  lastButton1State = DEFAULT_BUTTON_STATE;
+  lastButton2State = DEFAULT_BUTTON_STATE;
+  lastButton3State = DEFAULT_BUTTON_STATE;
+  lastButton4State = DEFAULT_BUTTON_STATE;
+  lastButton5State = DEFAULT_BUTTON_STATE;
+  lastButton6State = DEFAULT_BUTTON_STATE;
+  lastButton7State = DEFAULT_BUTTON_STATE;
+  lastButton8State = DEFAULT_BUTTON_STATE;
+  lastButton9State = DEFAULT_BUTTON_STATE;
+  lastButton10State = DEFAULT_BUTTON_STATE;
+  lastButton11State = DEFAULT_BUTTON_STATE;
+  lastButton12State = DEFAULT_BUTTON_STATE;
+  lastButton13State = DEFAULT_BUTTON_STATE;
+  lastButton14State = DEFAULT_BUTTON_STATE;
+  lastButton15State = DEFAULT_BUTTON_STATE;
+  lastButton16State = DEFAULT_BUTTON_STATE;
+  lastButton17State = DEFAULT_BUTTON_STATE;
+  lastButton18State = DEFAULT_BUTTON_STATE;
+  lastButton19State = DEFAULT_BUTTON_STATE;
+  lastButton20State = DEFAULT_BUTTON_STATE;
+}
+
 
 void playPreProgrammedSong() {
   // Stop any ongoing recording or playback
@@ -472,6 +498,86 @@ void playRecording(int slot) {
   }
 }
 
+void sendNotesWithTiming(const byte notes[], size_t count, bool noteOn, byte velocity=VELOCITY) {
+  uint8_t cmd = noteOn ? NOTE_ON : NOTE_OFF;
+  
+  for (size_t i = 0; i < count; i++) {
+    // Validate MIDI note value (should be 0-127)
+    if (notes[i] > 127) {
+      Serial.print("Invalid MIDI note value: ");
+      Serial.println(notes[i]);
+      continue; // Skip this invalid note
+    }
+    
+    // Reset MIDI state by sending status byte for each note
+    // This prevents running status issues
+    Serial1.write(cmd);
+    
+    // Ensure data bytes are in valid range (0-127)
+    Serial1.write(notes[i] & 0x7F);  // Mask to ensure 0-127 range
+    Serial1.write(noteOn ? (velocity & 0x7F) : 0);
+    
+    // If recording is active, capture this event with validated values
+    if (isRecording && eventCount < MAX_EVENTS) {
+      recordedSongs[eventCount].timeStamp = millis() - recordingStartTime;
+      recordedSongs[eventCount].note = notes[i] & 0x7F;  // Ensure valid note
+      recordedSongs[eventCount].velocity = noteOn ? (velocity & 0x7F) : 0;
+      recordedSongs[eventCount].isNoteOn = noteOn;
+      eventCount++;
+      
+      // Debug info
+      Serial.print("Recorded event: ");
+      Serial.print(recordedSongs[eventCount-1].timeStamp);
+      Serial.print("ms, Note:");
+      Serial.print(recordedSongs[eventCount-1].note);
+      Serial.print(", On:");
+      Serial.println(recordedSongs[eventCount-1].isNoteOn);
+    }
+    
+    // Increase delay between notes to prevent buffer overflow
+    delay(135);  // Slightly longer delay to ensure MIDI receiver can process
+  }
+  
+  // Force a small delay after sending a group of notes
+  delay(10);
+}
+
+void playChordTwice(const byte myChord[], size_t count) {
+  //byte myChord[] = { BUTTON11_NOTE, BUTTON14_NOTE, BUTTON15_NOTE, BUTTON16_NOTE };
+  // first burst (Note-On)
+  sendNotesWithTiming(myChord, 4, true);
+  // gap between first 4 and second 4
+  delay(100);
+  // second burst (Note-On)
+  sendNotesWithTiming(myChord, 4, true);
+
+  // hold chord for however long you like:
+  delay(193);
+  sendNotesWithTiming(myChord, 4, true);
+  // gap between first 4 and second 4
+  delay(100);
+  // second burst (Note-On)
+  sendNotesWithTiming(myChord, 4, true);
+  delay(300);
+  // now turn them all off, same pattern:
+  sendNotesWithTiming(myChord, 4, false);
+  delay(100);
+  sendNotesWithTiming(myChord, 4, false);
+}
+
+
+// Send an array of notes either On (noteOn=true) or Off (noteOn=false)
+void sendNotesWithoutTiming(const byte notes[], size_t count, bool noteOn, byte velocity=VELOCITY) {
+  uint8_t cmd = noteOn ? NOTE_ON : NOTE_OFF;
+  for (size_t i = 0; i < count; i++) {
+    Serial1.write(cmd);
+    Serial1.write(notes[i]);
+    Serial1.write(noteOn ? velocity : 0);
+    delay(193);  // Small delay to prevent flooding the MIDI bus
+  }
+}
+
+
 void setup() {
   // Initialize serial communication
   Serial.begin(115200);
@@ -568,7 +674,22 @@ void loop() {
   // Process musical note buttons (1-7)
   if (button1State != lastButton1State) {
     if (button1State != DEFAULT_BUTTON_STATE) {
-      MIDIMessage(NOTE_ON, BUTTON1_NOTE, VELOCITY);
+      // MIDIMessage(NOTE_ON, BUTTON1_NOTE, VELOCITY);
+      byte myChord[] = { BUTTON11_NOTE, BUTTON14_NOTE, BUTTON15_NOTE, BUTTON16_NOTE, BUTTON20_NOTE, BUTTON11_NOTE, BUTTON14_NOTE, BUTTON15_NOTE, BUTTON16_NOTE };
+      static bool chordPlaying = false;
+      if (!chordPlaying) {
+        //playChordTwice(myChord, 16);
+        sendNotesWithTiming(myChord, 15, true);
+        //sendNotesWithTiming(myChord, 8, true);
+        // sendNotesWithTiming(myChord, 8, true);
+        // chordPlaying = true;
+        
+        // //Send Note Off for the chord
+        // sendNotesWithTiming(myChord, 8, false);
+        // sendNotesWithTiming(myChord, 8, true);
+        // sendNotesWithTiming(myChord, 8, false);
+        chordPlaying = false;
+      }
     } else {
       MIDIMessage(NOTE_OFF, BUTTON1_NOTE, VELOCITY);
     }
@@ -577,7 +698,21 @@ void loop() {
 
   if (button2State != lastButton2State) {
     if (button2State != DEFAULT_BUTTON_STATE) {
-      MIDIMessage(NOTE_ON, BUTTON2_NOTE, VELOCITY);
+      //MIDIMessage(NOTE_ON, BUTTON2_NOTE, VELOCITY);
+      byte myChord[] = { BUTTON12_NOTE, BUTTON14_NOTE, BUTTON15_NOTE, BUTTON16_NOTE, BUTTON20_NOTE, BUTTON12_NOTE, BUTTON14_NOTE, BUTTON15_NOTE, BUTTON16_NOTE };
+      static bool chordPlaying = false;
+      if (!chordPlaying) {
+        sendNotesWithTiming(myChord, 15, true);
+        //delay(50);
+        //sendNotesWithTiming(myChord, 8, true);
+        //playChordTwice(myChord, 16);
+        //sendNotesWithTiming(myChord, 8, true);
+        chordPlaying = true;
+        
+        // Send Note Off for the chord
+        //sendNotesWithTiming(myChord, 8, false);
+        chordPlaying = false;
+      }
     } else {
       MIDIMessage(NOTE_OFF, BUTTON2_NOTE, VELOCITY);
     }
@@ -586,7 +721,15 @@ void loop() {
 
   if (button3State != lastButton3State) {
     if (button3State != DEFAULT_BUTTON_STATE) {
-      MIDIMessage(NOTE_ON, BUTTON3_NOTE, VELOCITY);
+      byte myChord[] = { BUTTON7_NOTE, BUTTON13_NOTE, BUTTON14_NOTE, BUTTON15_NOTE, BUTTON20_NOTE, BUTTON7_NOTE, BUTTON13_NOTE, BUTTON14_NOTE, BUTTON15_NOTE };
+      sendNotesWithTiming(myChord, 16, true);
+      //delay(100);
+      //sendNotesWithTiming(myChord, 8, true);
+      //MIDIMessage(NOTE_ON, BUTTON3_NOTE, VELOCITY);
+      // for (int i = 0; i < 4; i++) {
+      //   MIDIMessage(NOTE_ON, BUTTON13_NOTE, VELOCITY);
+      //   delay(100);
+      // }
     } else {
       MIDIMessage(NOTE_OFF, BUTTON3_NOTE, VELOCITY);
     }
@@ -595,7 +738,13 @@ void loop() {
 
   if (button4State != lastButton4State) {
     if (button4State != DEFAULT_BUTTON_STATE) {
-      MIDIMessage(NOTE_ON, BUTTON4_NOTE, VELOCITY);
+      for (int i = 0; i < 4; i++) {
+        MIDIMessage(NOTE_ON, BUTTON14_NOTE, VELOCITY);
+        MIDIMessage(NOTE_ON, BUTTON16_NOTE, VELOCITY);
+        MIDIMessage(NOTE_ON, BUTTON18_NOTE, VELOCITY);
+        delay(100);
+      }
+      //MIDIMessage(NOTE_ON, BUTTON4_NOTE, VELOCITY);
     } else {
       MIDIMessage(NOTE_OFF, BUTTON4_NOTE, VELOCITY);
     }
@@ -604,7 +753,12 @@ void loop() {
 
   if (button5State != lastButton5State) {
     if (button5State != DEFAULT_BUTTON_STATE) {
-      MIDIMessage(NOTE_ON, BUTTON5_NOTE, VELOCITY);
+      for (int i = 0; i < 4; i++) {
+        MIDIMessage(NOTE_ON, BUTTON14_NOTE, VELOCITY);
+        MIDIMessage(NOTE_ON, BUTTON16_NOTE, VELOCITY);
+        delay(100);
+      }
+      //MIDIMessage(NOTE_ON, BUTTON5_NOTE, VELOCITY);
     } else {
       MIDIMessage(NOTE_OFF, BUTTON5_NOTE, VELOCITY);
     }
@@ -613,7 +767,12 @@ void loop() {
 
   if (button6State != lastButton6State) {
     if (button6State != DEFAULT_BUTTON_STATE) {
-      MIDIMessage(NOTE_ON, BUTTON6_NOTE, VELOCITY);
+      for (int i = 0; i < 4; i++) {
+        MIDIMessage(NOTE_ON, BUTTON13_NOTE, VELOCITY);
+        MIDIMessage(NOTE_ON, BUTTON15_NOTE, VELOCITY);
+        delay(100);
+      }
+      //MIDIMessage(NOTE_ON, BUTTON6_NOTE, VELOCITY);
     } else {
       MIDIMessage(NOTE_OFF, BUTTON6_NOTE, VELOCITY);
     }
@@ -622,7 +781,12 @@ void loop() {
 
   if (button7State != lastButton7State) {
     if (button7State != DEFAULT_BUTTON_STATE) {
-      MIDIMessage(NOTE_ON, BUTTON7_NOTE, VELOCITY);
+      //MIDIMessage(NOTE_ON, BUTTON7_NOTE, VELOCITY);
+      for (int i = 0; i < 4; i++) {
+        MIDIMessage(NOTE_ON, BUTTON15_NOTE, VELOCITY);
+        MIDIMessage(NOTE_ON, BUTTON18_NOTE, VELOCITY);
+        delay(100);
+      }
     } else {
       MIDIMessage(NOTE_OFF, BUTTON7_NOTE, VELOCITY);
     }
@@ -645,12 +809,12 @@ void loop() {
   if (button9State != lastButton9State) {
     if (button9State != DEFAULT_BUTTON_STATE) {
       MIDIMessage(NOTE_ON, BUTTON9_NOTE, VELOCITY);
-      if (!isRecording && !isPlaying) {
+      //if (!isRecording && !isPlaying) {
         playRecording(1);  // Play recording from slot 1
-      }
-      if (isPlaying) {
-        stopPlayback();
-      }
+      //}
+      // if (isPlaying) {
+      //   stopPlayback();
+      // }
     } else {
       MIDIMessage(NOTE_OFF, BUTTON9_NOTE, VELOCITY);
     }
@@ -661,12 +825,12 @@ void loop() {
   if (button10State != lastButton10State) {
     if (button10State != DEFAULT_BUTTON_STATE) {
       MIDIMessage(NOTE_ON, BUTTON10_NOTE, VELOCITY);
-      if (!isRecording && !isPlaying) {
-        playRecording(2);  // Play recording from slot 2
-      }
-      if (isPlaying) {
-        stopPlayback();
-      }
+      //if (!isRecording && !isPlaying) {
+        playRecording(3);  // Play recording from slot 2
+      //}
+      // if (isPlaying) {
+      //   stopPlayback();
+      // }
     } else {
       MIDIMessage(NOTE_OFF, BUTTON10_NOTE, VELOCITY);
     }
@@ -691,7 +855,9 @@ void loop() {
   // Process upper row of musical notes (11-18)
   if (button11State != lastButton11State) {
     if (button11State != DEFAULT_BUTTON_STATE) {
-      MIDIMessage(NOTE_ON, BUTTON11_NOTE, VELOCITY);
+      byte myChord[] = { BUTTON14_NOTE, BUTTON15_NOTE, BUTTON14_NOTE, BUTTON13_NOTE };
+      sendNotesWithTiming(myChord, 4, true);
+      
     } else {
       MIDIMessage(NOTE_OFF, BUTTON11_NOTE, VELOCITY);
     }
@@ -700,7 +866,9 @@ void loop() {
 
   if (button12State != lastButton12State) {
     if (button12State != DEFAULT_BUTTON_STATE) {
-      MIDIMessage(NOTE_ON, BUTTON12_NOTE, VELOCITY);
+      byte myChord[] = { BUTTON16_NOTE, BUTTON17_NOTE, BUTTON16_NOTE, BUTTON15_NOTE };
+      sendNotesWithTiming(myChord, 4, true);
+      //MIDIMessage(NOTE_ON, BUTTON12_NOTE, VELOCITY);
     } else {
       MIDIMessage(NOTE_OFF, BUTTON12_NOTE, VELOCITY);
     }
@@ -784,6 +952,7 @@ void loop() {
       if (isPlaying) {
         stopPlayback();
       }
+      resetButtonStates();
       // if (isPlaying) {
       //   stopPlayback();
       // }
@@ -880,4 +1049,6 @@ void loop() {
   // Short delay to prevent excessive CPU usage and debounce the buttons
   delay(10);  // 10ms delay - fast enough for responsiveness but allows for debouncing
 }
+
+
   
